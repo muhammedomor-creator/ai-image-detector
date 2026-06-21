@@ -57,27 +57,27 @@ def detect_image():
     if not GEMINI_API_KEY:
         return jsonify({"error": "Gemini API Key সেট করা হয়নি! রেন্ডার সেটিংস চেক করুন।"}), 500
 
-    # ছবির জন্য সবচেয়ে দ্রুত এবং শক্তিশালী মডেল Gemini 1.5 Flash
-    model = genai.GenerativeModel(model_name="gemini-1.5-flash")
-
-    # এআই-কে নিখুঁত ও নির্দিষ্ট ফরম্যাটে উত্তর দেওয়ার জন্য প্রম্পট
-    prompt = """
-    Analyze this image very carefully and determine if it is authentic or AI-influenced. 
-    You must reply ONLY in a valid JSON format with the exact keys below. Do not include markdown or backticks like ```json.
-    
-    Expected JSON format:
-    {
-      "status": "Choose one from: Original / AI Generated / AI Edited / Deepfake / Manually Edited",
-      "confidence": "Percentage between 0% to 100%",
-      "reason": "Detailed explanation in Bengali language explaining why you chose this status",
-      "ai_score": 85, 
-      "human_score": 15
-    }
-    
-    Note: 'ai_score' and 'human_score' must be integers summing up to 100. Write the 'reason' in clear, professional Bengali.
-    """
-
     try:
+        # ছবির জন্য সবচেয়ে দ্রুত এবং শক্তিশালী মডেল Gemini 1.5 Flash (সঠিক ডিরেক্টরি সহ)
+        model = genai.GenerativeModel(model_name="models/gemini-1.5-flash")
+
+        # এআই-কে নিখুঁত ও নির্দিষ্ট ফরম্যাটে উত্তর দেওয়ার জন্য প্রম্পট
+        prompt = """
+        Analyze this image very carefully and determine if it is authentic or AI-influenced. 
+        You must reply ONLY in a valid JSON format with the exact keys below. Do not include markdown or backticks like ```json.
+        
+        Expected JSON format:
+        {
+          "status": "Choose one from: Original / AI Generated / AI Edited / Deepfake / Manually Edited",
+          "confidence": "Percentage between 0% to 100%",
+          "reason": "Detailed explanation in Bengali language explaining why you chose this status",
+          "ai_score": 85, 
+          "human_score": 15
+        }
+        
+        Note: 'ai_score' and 'human_score' must be integers summing up to 100. Write the 'reason' in clear, professional Bengali.
+        """
+
         # জেমিনি সার্ভারে ছবি এবং প্রম্পট পাঠিয়ে বিশ্লেষণ করা
         response = model.generate_content([
             prompt,
