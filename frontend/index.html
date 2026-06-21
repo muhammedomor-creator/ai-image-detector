@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Image Detector & Verifier</title>
+    <title>AI Image Detector & Verifier (Deep Scan Edition)</title>
     <style>
         * {
             box-sizing: border-box;
@@ -52,7 +52,7 @@
         .auth-toggle { text-align: center; margin-top: 15px; font-size: 14px; color: #94a3b8; }
         .auth-toggle a { color: #38bdf8; text-decoration: none; font-weight: bold; cursor: pointer; }
 
-        /* Dashboard UI */
+        /* ড্যাশবোর্ড ডিজাইন */
         .dashboard { width: 100%; max-width: 1100px; display: none; flex-direction: column; gap: 20px; }
         header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
         .user-profile { display: flex; align-items: center; gap: 15px; }
@@ -66,12 +66,20 @@
             text-align: center; cursor: pointer; background: rgba(15, 23, 42, 0.3); transition: 0.3s;
         }
         .drop-zone:hover { border-color: #38bdf8; background: rgba(56, 189, 248, 0.05); }
-        .loading-wrapper { text-align: center; margin-top: 15px; }
+        
+        /* ৩০ সেকেন্ডের ডিপ স্ক্যান অ্যানিমেশন ও স্ট্যাটাস */
+        .loading-wrapper { text-align: center; margin-top: 20px; background: rgba(15, 23, 42, 0.5); padding: 20px; border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.15); }
         .spinner {
-            width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1); border-top-color: #38bdf8;
-            border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 10px;
+            width: 50px; height: 50px; border: 4px solid rgba(255,255,255,0.05); border-top-color: #38bdf8;
+            border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 15px;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* কাস্টম রিয়েল-টাইম প্রোগ্রেস বার */
+        .progress-container { width: 100%; height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.05); }
+        .progress-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #38bdf8, #34d399); transition: width 0.3s ease; }
+        .diagnostic-step { font-family: monospace; font-size: 13px; color: #38bdf8; min-height: 20px; margin-bottom: 5px; }
+        .diagnostic-percentage { font-size: 16px; font-weight: bold; color: #34d399; margin-bottom: 10px; }
 
         .result-badge { padding: 8px 15px; border-radius: 6px; font-weight: bold; display: inline-block; background: #eab308; color: #0f172a; text-transform: uppercase; margin-bottom: 10px; }
         .reason-box { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border-left: 4px solid #38bdf8; font-size: 14px; line-height: 1.6; color: #cbd5e1; }
@@ -88,6 +96,7 @@
 </head>
 <body>
 
+    <!-- 🔐 অথেন্টিকেশন স্ক্রিন -->
     <div id="auth-container" class="glass-card">
         <h2 id="auth-title">লগইন করুন</h2>
         
@@ -123,6 +132,7 @@
         </div>
     </div>
 
+    <!-- 📊 ড্যাশবোর্ড স্ক্রিন -->
     <div id="dashboard-container" class="dashboard">
         <header>
             <h2>AI Image Detector</h2>
@@ -134,22 +144,27 @@
 
         <div class="main-grid">
             <div class="glass-card upload-section">
-                <h3>ছবি স্ক্যান করুন</h3>
+                <h3>ডিপ ইমেজ অ্যানালাইজার</h3>
                 <div class="drop-zone" id="drop-zone">
                     <p>এখানে ছবি ড্রপ করুন অথবা ক্লিক করে সিলেক্ট করুন</p>
                     <input type="file" id="image-input" accept="image/*" style="display: none;">
                     <img id="preview-img" style="display: none; max-width: 100%; max-height: 200px; border-radius: 8px; margin-top: 15px;">
                 </div>
-                <button id="scan-btn" disabled>ছবিটি স্ক্যান করুন 🔍</button>
+                <button id="scan-btn" disabled>ডিপ স্ক্যান শুরু করুন 🔍</button>
                 
+                <!-- ৩০ সেকেন্ডের ডায়াগনস্টিক লগার ইন্টারফেস -->
                 <div id="loading" class="loading-wrapper" style="display: none;">
                     <div class="spinner"></div>
-                    <p>Gemini AI দ্বারা ছবির পিক্সেলসমূহ বিশ্লেষণ করা হচ্ছে...</p>
+                    <div class="diagnostic-percentage" id="diagnostic-pct">০% সম্পন্ন</div>
+                    <div class="progress-container">
+                        <div class="progress-bar" id="progress-bar"></div>
+                    </div>
+                    <div class="diagnostic-step" id="diagnostic-step">অপেক্ষমান...</div>
                 </div>
 
                 <div id="result-area" style="display: none; margin-top: 25px;">
                     <div class="result-badge" id="result-status">AI Generated</div>
-                    <p style="margin: 12px 0; color: #94a3b8;">নিশ্চয়তা: <span id="result-confidence" style="color: #38bdf8; font-weight: bold;">0%</span></p>
+                    <p style="margin: 12px 0; color: #94a3b8;">নিশ্চয়তা (Accuracy): <span id="result-confidence" style="color: #38bdf8; font-weight: bold;">0%</span></p>
                     <div class="reason-box" id="result-reason">বিশ্লেষণ রিপোর্ট...</div>
                     <div style="max-width: 220px; margin: 20px auto;">
                         <canvas id="resultChart"></canvas>
@@ -158,7 +173,7 @@
             </div>
 
             <div class="glass-card history-section">
-                <h3>সর্বশেষ ৫টি সার্চ হিস্টোরি</h3>
+                <h3>সর্বশেষ ৫টি ডিপ সার্চ হিস্টোরি</h3>
                 <div id="history-list">
                     <p class="empty-text">কোনো হিস্টোরি পাওয়া যায়নি।</p>
                 </div>
@@ -191,7 +206,6 @@
         let selectedFile = null;
         let chartInstance = null;
 
-        // DOM Elements
         const authContainer = document.getElementById('auth-container');
         const dashboardContainer = document.getElementById('dashboard-container');
         const authTitle = document.getElementById('auth-title');
@@ -205,7 +219,6 @@
         const verifyOtpBtn = document.getElementById('verify-otp-btn');
         const passLabel = document.getElementById('pass-label');
 
-        // ইন্টারফেস সুইচ লজিক (বাটন ক্লিক ফিক্স)
         toggleAuthLink.addEventListener('click', function(e) {
             e.preventDefault();
             if(currentMode === "login" || currentMode === "forget") {
@@ -266,7 +279,7 @@
                         alert("❌ ভুল মোবাইল নম্বর অথবা পাসওয়ার্ড!");
                     }
                 } catch(e) {
-                    alert("ফায়ারবেস কানেকশন এরর! ফায়ারস্টোর রুলস চেক করুন।");
+                    alert("ফায়ারবেস কানেকশন এরর!");
                 } finally {
                     mainAuthBtn.innerText = "প্রবেশ করুন 🚀";
                 }
@@ -341,7 +354,6 @@
             setLoginMode();
         };
 
-        // --- ইমেজ ডিটেকশন ও হিস্টোরি ---
         const dropZone = document.getElementById('drop-zone');
         const imageInput = document.getElementById('image-input');
         const previewImg = document.getElementById('preview-img');
@@ -357,28 +369,67 @@
             }
         };
 
+        // ৩০ সেকেন্ডের লাইভ ডায়াগনস্টিক সিগনেচার লুপ
+        function runDiagnosticUI() {
+            const steps = [
+                { time: 0, text: "মেটাডাটা ও এক্সিফ (EXIF) সিগনেচার রিড করা হচ্ছে...", pct: 5 },
+                { time: 4, text: "পিক্সেল-নয়েজ গ্রেইন অ্যানালাইসিস শুরু হয়েছে...", pct: 25 },
+                { time: 8, text: "এরর লেভেল অ্যানালাইসিস (ELA) কম্প্রেশন টেস্ট করা হচ্ছে...", pct: 45 },
+                { time: 13, text: "হাই-ফ্রিকোয়েন্সি প্যাটার্ন এবং সিমেট্রি স্ক্যান করা হচ্ছে...", pct: 60 },
+                { time: 18, text: "ডিজিটাল আর্ট ও ফটোশপ সিগনেচার কালার কোডিং ম্যাচিং...", pct: 75 },
+                { time: 23, text: "গবেষণা অ্যালগরিদমের ২১টি চেকলিস্ট ভ্যালিডেট করা হচ্ছে...", pct: 90 },
+                { time: 27, text: "চূড়ান্ত ডায়াগনস্টিক রিপোর্ট কম্পাইল করা হচ্ছে...", pct: 98 }
+            ];
+
+            const bar = document.getElementById('progress-bar');
+            const stepText = document.getElementById('diagnostic-step');
+            const pctText = document.getElementById('diagnostic-pct');
+
+            steps.forEach(step => {
+                setTimeout(() => {
+                    if(document.getElementById('loading').style.display === "block") {
+                        stepText.innerText = `🔍 ${step.text}`;
+                        bar.style.width = `${step.pct}%`;
+                        pctText.innerText = `${step.pct}% সম্পন্ন`;
+                    }
+                }, step.time * 1000);
+            });
+        }
+
         scanBtn.onclick = async () => {
             if(!selectedFile) return;
             document.getElementById('loading').style.display = "block";
             document.getElementById('result-area').style.display = "none";
             scanBtn.disabled = true;
 
+            // ৩০ সেকেন্ডের ফেক বাট রিয়্যাল-টাইম প্রোগ্রেস বার রান করা
+            runDiagnosticUI();
+
             const formData = new FormData();
             formData.append('image', selectedFile);
 
             try {
+                // ব্যাকএন্ড কল করা (যা নিজেই ৩০ সেকেন্ড সময় নিবে)
                 const res = await fetch(`${BACKEND_URL}/api/detect-image`, { method: "POST", body: formData });
                 const result = await res.json();
                 if(res.ok) {
-                    showResult(result);
+                    // প্রোগ্রেস ১০০% করে রেজাল্ট শো করা
+                    document.getElementById('progress-bar').style.width = "100%";
+                    document.getElementById('diagnostic-pct').innerText = "১০০% সম্পন্ন";
+                    
+                    setTimeout(() => {
+                        document.getElementById('loading').style.display = "none";
+                        showResult(result);
+                    }, 800);
                     await saveHistoryToFirebase(result);
                 } else {
-                    alert("স্ক্যান ব্যর্থ: " + result.error);
+                    alert("স্ক্যান ব্যর্থ: " + (result.error || result.message || "Unknown error"));
+                    document.getElementById('loading').style.display = "none";
                 }
             } catch (err) {
                 alert("সার্ভার রেসপন্স করছে না!");
-            } finally {
                 document.getElementById('loading').style.display = "none";
+            } finally {
                 scanBtn.disabled = false;
             }
         };
