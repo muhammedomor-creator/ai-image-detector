@@ -15,8 +15,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+
 // 🌐 Render-এ আপনার ব্যাকএন্ড লাইভ করার পর প্রাপ্ত URL-টি এখানে বসাবেন
-const BACKEND_URL = "[https://your-render-app-name.onrender.com](https://your-render-app-name.onrender.com)"; 
+const BACKEND_URL = "https://ai-image-detector-0suu.onrender.com"; 
+
+ "[https://your-render-app-name.onrender.com](https://your-render-app-name.onrender.com)"; 
 
 let currentMode = "login"; 
 let currentUser = null;
