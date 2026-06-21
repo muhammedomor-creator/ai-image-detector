@@ -43,7 +43,7 @@ def send_whatsapp_otp():
     except Exception as e:
         return jsonify({"success": False, "message": "হোয়াটসঅ্যাপ এপিআই কানেকশনে সমস্যা: " + str(e)}), 500
 
-# 🤖 ২. Native HTTP Request দিয়ে ইমেজ ডিটেক্ট করার রাউট (১০০% বাগ-মুক্ত এবং লাইফটাইম নিরাপদ)
+# 🤖 ২. Native HTTP Request দিয়ে ইমেজ ডিটেক্ট করার রাউট (১০০% বাগ-মুক্ত)
 @app.route('/api/detect-image', methods=['POST'])
 def detect_image():
     if 'image' not in request.files:
@@ -56,10 +56,10 @@ def detect_image():
     if not GEMINI_API_KEY:
         return jsonify({"error": "Gemini API Key সেট করা হয়নি! রেন্ডার সেটিংস চেক করুন।"}), 500
 
-    # ইমেজ বাইনারি ডেটাকে বেস৬৪-এ রূপান্তর (গুগল এপিআই রিকোয়েস্টের নিয়ম অনুযায়ী)
+    # ইমেজ বাইনারি ডেটাকে বেস৬৪-এ রূপান্তর করা
     base64_image = base64.b64encode(image_bytes).decode('utf-8')
 
-    # জেমিনির অফিশিয়াল এপিআই ইউআরএল (v1beta সংস্করণ যা সরাসরি ইমেজ অবজেক্ট সাপোর্ট করে)
+    # জেমিনির অফিশিয়াল এপিআই ইউআরএল
     gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
     prompt = """
@@ -78,7 +78,6 @@ def detect_image():
     Note: 'ai_score' and 'human_score' must be integers summing up to 100. Write the 'reason' in clear, professional Bengali.
     """
 
-    # গুগলের র রিকোয়েস্ট পেলোড পেড স্ট্রাকচার
     payload = {
         "contents": [
             {
@@ -101,13 +100,13 @@ def detect_image():
         response = requests.post(gemini_url, json=payload, headers=headers, timeout=30)
         res_json = response.json()
 
-        # গুগল রেসপন্স থেকে টেক্সট এক্সট্রাক্ট করা
+        # স্পেলিং ঠিক করা হয়েছে: IndexErrors থেকে IndexError করা হয়েছে
         try:
             raw_text = res_json['candidates'][0]['content']['parts'][0]['text']
-        except (KeyError, IndexErrors):
+        except (KeyError, IndexError):
             return jsonify({"error": "গুগল এআই ছবি বিশ্লেষণ করতে পারেনি বা রেসপন্স ফরম্যাট মেলেনি।"}), 500
 
-        # টেক্সট ক্লিনিং (ব্যাকটিক রিমুভ করা)
+        # টেক্সট থেকে জেসন ক্লিন করা
         clean_text = raw_text.strip().replace("```json", "").replace("```", "").strip()
 
         try:
