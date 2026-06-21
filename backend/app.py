@@ -1,15 +1,13 @@
 import os
 import json
-import base64
 import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from PIL import Image, ImageChops
+import io
 
 app = Flask(__name__)
-CORS(app)  # CORS পলিসি হ্যান্ডেল করা
-
-# 🔑 Render-এর Settings থেকে নেওয়া Gemini API Key
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+CORS(app)
 
 # 🇧🇩 বাংলাদেশি ফোন নম্বর সঠিক ফরম্যাটে (+880) রূপান্তর করার ফাংশন
 def format_bd_number(phone):
@@ -43,86 +41,84 @@ def send_whatsapp_otp():
     except Exception as e:
         return jsonify({"success": False, "message": "হোয়াটসঅ্যাপ এপিআই কানেকশনে সমস্যা: " + str(e)}), 500
 
-# 🤖 ২. Native HTTP Request দিয়ে ইমেজ ডিটেক্ট করার রাউট (১০০% বাগ-মুক্ত)
+# 📸 ২. সরাসরি কোডের মাধ্যমে ইমেজ অ্যানালাইসিস (No Gemini API)
 @app.route('/api/detect-image', methods=['POST'])
 def detect_image():
     if 'image' not in request.files:
         return jsonify({"error": "কোনো ছবি আপলোড করা হয়নি!"}), 400
     
     file = request.files['image']
-    mime_type = file.content_type
     image_bytes = file.read()
 
-    if not GEMINI_API_KEY:
-        return jsonify({"error": "Gemini API Key সেট করা হয়নি! রেন্ডার সেটিংস চেক করুন।"}), 500
-
-    # ইমেজ বাইনারি ডেটাকে বেস৬৪-এ রূপান্তর করা
-    base64_image = base64.b64encode(image_bytes).decode('utf-8')
-
-    # জেমিনির অফিশিয়াল এপিআই ইউআরএল
-    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-
-    prompt = """
-    Analyze this image very carefully and determine if it is authentic or AI-influenced. 
-    You must reply ONLY in a valid JSON format with the exact keys below. Do not include markdown or backticks like ```json.
-    
-    Expected JSON format:
-    {
-      "status": "Choose one from: Original / AI Generated / AI Edited / Deepfake / Manually Edited",
-      "confidence": "Percentage between 0% to 100%",
-      "reason": "Detailed explanation in Bengali language explaining why you chose this status",
-      "ai_score": 85, 
-      "human_score": 15
-    }
-    
-    Note: 'ai_score' and 'human_score' must be integers summing up to 100. Write the 'reason' in clear, professional Bengali.
-    """
-
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt},
-                    {
-                        "inlineData": {
-                            "mimeType": mime_type,
-                            "data": base64_image
-                        }
-                    }
-                ]
-            }
-        ]
-    }
-
-    headers = {"Content-Type": "application/json"}
-
     try:
-        response = requests.post(gemini_url, json=payload, headers=headers, timeout=30)
-        res_json = response.json()
+        # ছবিটিকে মেমোরিতে ওপেন করা
+        img = Image.open(io.BytesIO(image_bytes))
+        
+        is_edited = False
+        software_used = "Unknown"
+        reason_list = []
+        
+        # ১. মেটাডাটা বা এক্সিফ ডাটা (EXIF) চেক করা
+        exif_data = img._getexif() if hasattr(img, '_getexif') else None
+        
+        if exif_data:
+            for tag, value in exif_data.items():
+                # লজিক: মেটাডাটায় যদি কোনো এডিটিং সফটওয়্যার বা এআই ট্যাগ থাকে
+                val_str = str(value).lower()
+                if 'photoshop' in val_str or 'illustrator' in val_str or 'gimp' in val_str:
+                    is_edited = True
+                    software_used = "Adobe Photoshop / Editing Suite"
+                    reason_list.append("ছবির মেটাডাটায় ডিজিটাল এডিটিং সফটওয়্যারের স্বাক্ষর পাওয়া গেছে।")
+                if 'midjourney' in val_str or 'stable diffusion' in val_str or 'dall-e' in val_str:
+                    is_edited = True
+                    software_used = "AI Generation Tool"
+                    reason_list.append("ছবির ইন্টারনাল ট্যাগে এআই জেনারেটরের নাম পাওয়া গেছে।")
+        else:
+            # সাধারণত এআই জেনারেটেড বা সোশ্যাল মিডিয়া থেকে নামানো এডিটেড ছবির মেটাডাটা বা ক্যামেরা ইনফো থাকে না
+            reason_list.append("ছবিটিতে কোনো ক্যামেরা বা ডিভাইসের মেটাডাটা (EXIF) পাওয়া যায়নি, যা এডিটেড বা এআই ছবির ক্ষেত্রে সাধারণ লক্ষণ।")
 
-        # স্পেলিং ঠিক করা হয়েছে: IndexErrors থেকে IndexError করা হয়েছে
-        try:
-            raw_text = res_json['candidates'][0]['content']['parts'][0]['text']
-        except (KeyError, IndexError):
-            return jsonify({"error": "গুগল এআই ছবি বিশ্লেষণ করতে পারেনি বা রেসপন্স ফরম্যাট মেলেনি।"}), 500
+        # ২. এরর লেভেল অ্যানালাইসিস (ELA) - ডিজিটাল রিসেভিং চেক করা
+        # ছবিটিকে একবার ৯০% কোয়ালিটিতে সেভ করে আবার রি-ওপেন করা হয় কম্প্রেশন গ্যাপ বোঝার জন্য
+        resaved_stream = io.BytesIO()
+        img.convert("RGB").save(resaved_stream, "JPEG", quality=90)
+        resaved_stream.seek(0)
+        resaved_img = Image.open(resaved_stream)
+        
+        # দুই ছবির পিক্সেল গ্যাপ বের করা
+        diff = ImageChops.difference(img.convert("RGB"), resaved_img)
+        extrema = diff.getextrema()
+        max_diff = max([ex[1] for ex in extrema])
+        
+        # যদি পিক্সেল ডিফারেন্স অনেক বেশি হয়, তার মানে এটি এডিটেড বা এআই ইমেজ
+        if max_diff > 35:
+            is_edited = True
+            reason_list.append(f"ছবির পিক্সেল কম্প্রেশন অ্যানালাইসিসে অসঙ্গতি পাওয়া গেছে (Error Level: {max_diff}), যা রি-সেভ বা এডিটিং নির্দেশ করে।")
 
-        # টেক্সট থেকে জেসন ক্লিন করা
-        clean_text = raw_text.strip().replace("```json", "").replace("```", "").strip()
+        # চূড়ান্ত স্ট্যাটাস ও স্কোর নির্ধারণ
+        if is_edited:
+            status = "AI Edited / Manually Edited" if software_used != "AI Generation Tool" else "AI Generated"
+            ai_score = int(min(max_diff * 2, 95)) if max_diff > 0 else 75
+            human_score = 100 - ai_score
+            confidence = f"{ai_score}%"
+            reason = " ".join(reason_list) if reason_list else "কোড অ্যানালাইসিসে ছবিটিতে কৃত্রিম পরিবর্তনের প্রমাণ পাওয়া গেছে।"
+        else:
+            status = "Original"
+            ai_score = int(max_diff / 2) if max_diff > 0 else 5
+            human_score = 100 - ai_score
+            confidence = f"{human_score}%"
+            reason = "ছবির মেটাডাটা এবং পিক্সেল লেভেল স্বাভাবিক রয়েছে। এটি একটি আসল বা আন-এডিটেড ছবি হওয়ার সম্ভাবনা বেশি।"
 
-        try:
-            json_data = json.loads(clean_text)
-            return jsonify(json_data), 200
-        except json.JSONDecodeError:
-            return jsonify({
-                "status": "AI Generated",
-                "confidence": "92%",
-                "reason": clean_text if clean_text else "ছবিটি এআই দ্বারা জেনারেট করা হয়েছে বলে প্রতীয়মান হয়।",
-                "ai_score": 92,
-                "human_score": 8
-            }), 200
+        # ফ্রন্টএন্ডের ডোনাট চার্ট ও কার্ডের জন্য সঠিক ফরম্যাটে ডাটা পাঠানো
+        return jsonify({
+            "status": status,
+            "confidence": confidence,
+            "reason": reason,
+            "ai_score": ai_score,
+            "human_score": human_score
+        }), 200
 
     except Exception as e:
-        return jsonify({"error": f"সার্ভার প্রসেসিং এরর: {str(e)}"}), 500
+        return jsonify({"error": f"ছবিটি প্রসেস করতে কোডে সমস্যা হয়েছে: {str(e)}"}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
